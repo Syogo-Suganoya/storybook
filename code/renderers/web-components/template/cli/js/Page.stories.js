@@ -1,10 +1,18 @@
 import preview from '../../.storybook/preview';
+import { html } from 'lit';
 import * as HeaderStories from './Header.stories';
-import { Page } from './Page';
+import './Page';
 
 const meta = preview.meta({
   title: 'Example/Page',
-  render: (args) => Page(args),
+  render: ({ user, onLogin, onLogout, onCreateAccount }) => html`
+    <storybook-page
+      .user=${user}
+      @login=${onLogin}
+      @logout=${onLogout}
+      @create-account=${onCreateAccount}
+    ></storybook-page>
+  `,
 });
 
 export const LoggedIn = meta.story({
