@@ -219,6 +219,92 @@ describe('Preview hooks', () => {
       run(() => {});
       expect(destroy).toHaveBeenCalledTimes(1);
     });
+    describe('when an outer decorator renders the story after STORY_RENDERED', () => {
+      let renderLater: () => void;
+      const deferringDecorator: DecoratorFunction = (storyFn) => {
+        renderLater = () => storyFn();
+        return 'placeholder while loading';
+      };
+
+      it('triggers the effect of an inner decorator', async () => {
+        const effect = vi.fn();
+        run(() => {}, [
+          (storyFn) => {
+            useEffect(effect, []);
+            return storyFn();
+          },
+          deferringDecorator,
+        ]);
+        expect(effect).not.toHaveBeenCalled();
+
+        renderLater();
+        await vi.waitFor(() => expect(effect).toHaveBeenCalledTimes(1));
+      });
+      it("doesn't retrigger the effect if none of the deps are changed", async () => {
+        const effect = vi.fn();
+        run(() => {}, [
+          (storyFn) => {
+            useEffect(effect, [0]);
+            return storyFn();
+          },
+          deferringDecorator,
+        ]);
+        renderLater();
+        await vi.waitFor(() => expect(effect).toHaveBeenCalledTimes(1));
+
+        renderLater();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(effect).toHaveBeenCalledTimes(1);
+      });
+      it('performs cleanup when the deps are changed', async () => {
+        const destroy = vi.fn();
+        const effect = vi.fn(() => destroy);
+        let counter = 0;
+        run(() => {}, [
+          (storyFn) => {
+            useEffect(effect, [counter]);
+            return storyFn();
+          },
+          deferringDecorator,
+        ]);
+        renderLater();
+        await vi.waitFor(() => expect(effect).toHaveBeenCalledTimes(1));
+        counter += 1;
+        renderLater();
+        await vi.waitFor(() => expect(destroy).toHaveBeenCalledTimes(1));
+      });
+      it('keeps the effects of the decorators that already rendered', async () => {
+        const outerDestroy = vi.fn();
+        run(() => {}, [
+          (storyFn) => {
+            useEffect(() => {}, []);
+            return storyFn();
+          },
+          deferringDecorator,
+          (storyFn) => {
+            useEffect(() => outerDestroy, []);
+            return storyFn();
+          },
+        ]);
+        renderLater();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(outerDestroy).not.toHaveBeenCalled();
+      });
+      it("doesn't trigger the effect if the hooks are cleaned before it runs", async () => {
+        const effect = vi.fn();
+        run(() => {}, [
+          (storyFn) => {
+            useEffect(effect, []);
+            return storyFn();
+          },
+          deferringDecorator,
+        ]);
+        renderLater();
+        hooks.clean();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(effect).not.toHaveBeenCalled();
+      });
+    });
   });
   describe('useChannel', () => {
     it('calls .on when rendering the decorator', () => {

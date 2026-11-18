@@ -497,7 +497,28 @@ export function useReducer<S, A>(
  */
 export function useEffect(create: () => (() => void) | void, deps?: any[]): void {
   const hooks = getHooksContextOrThrow();
-  const effect = useMemoLike('useEffect', () => ({ create }), deps);
+  const previous: Effect | undefined =
+    hooks.currentPhase === 'UPDATE'
+      ? hooks.currentHooks[hooks.nextHookIndex]?.memoizedState
+      : undefined;
+  const effect: Effect = useMemoLike('useEffect', () => ({ create }), deps);
+
+  // The story already rendered, so no STORY_RENDERED will trigger this effect. This happens when an
+  // outer decorator renders the story later, for example after loading data.
+  if (hooks.currentContext == null) {
+    if (effect !== previous) {
+      hooks.prevEffects = [...hooks.prevEffects.filter((e) => e !== previous), effect];
+      setTimeout(() => {
+        if (!hooks.prevEffects.includes(effect)) {
+          return;
+        }
+        previous?.destroy?.();
+        effect.destroy = effect.create();
+      }, 0);
+    }
+    return;
+  }
+
   if (!hooks.currentEffects.includes(effect)) {
     hooks.currentEffects.push(effect);
   }
