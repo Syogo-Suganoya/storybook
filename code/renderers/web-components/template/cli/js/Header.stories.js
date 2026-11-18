@@ -1,13 +1,21 @@
 import preview from '../../.storybook/preview';
+import { html } from 'lit';
 import { fn } from 'storybook/test';
 
-import { Header } from './Header';
+import './Header';
 
 const meta = preview.meta({
   title: 'Example/Header',
   // This component will have an automatically generated Autodocs entry: https://storybook.js.org/web-components/vue/writing-docs/autodocs
   tags: ['autodocs'],
-  render: (args) => Header(args),
+  render: ({ user, onLogin, onLogout, onCreateAccount }) => html`
+    <storybook-header
+      .user=${user}
+      @login=${onLogin}
+      @logout=${onLogout}
+      @create-account=${onCreateAccount}
+    ></storybook-header>
+  `,
   args: {
     onLogin: fn(),
     onLogout: fn(),
