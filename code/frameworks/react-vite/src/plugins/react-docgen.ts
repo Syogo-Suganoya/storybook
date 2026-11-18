@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, relative, sep } from 'node:path';
 
@@ -54,14 +55,20 @@ export async function reactDocgen({
       try {
         const docgenResults = parseDocgen(src, id, createTsconfigMatchPath(id));
         const s = new MagicString(src);
+        const docNodes: string[] = [];
 
         docgenResults.forEach((info) => {
           const { actualName, definedInFile, ...docgenInfo } = info;
           if (actualName && definedInFile == id) {
             const docNode = JSON.stringify(docgenInfo);
+            docNodes.push(docNode);
             s.append(`;${actualName}.__docgenInfo=${docNode}`);
           }
         });
+
+        if (docNodes.length > 0) {
+          s.append(invalidateWhenDocgenChanges(docNodes));
+        }
 
         return {
           code: s.toString(),
@@ -76,6 +83,22 @@ export async function reactDocgen({
       }
     },
   };
+}
+
+/**
+ * React Fast Refresh accepts the update of a component module, so the story files that import it
+ * are not re-run and Storybook keeps the component with its previous `__docgenInfo`. When the
+ * docgen changes, invalidate the module so that the update reaches the story files.
+ */
+function invalidateWhenDocgenChanges(docNodes: string[]) {
+  const hash = JSON.stringify(createHash('sha1').update(docNodes.join('\n')).digest('hex'));
+  return `
+;if (import.meta.hot) {
+  if (import.meta.hot.data.storybookDocgenHash !== undefined && import.meta.hot.data.storybookDocgenHash !== ${hash}) {
+    import.meta.hot.invalidate('The component docs changed');
+  }
+  import.meta.hot.data.storybookDocgenHash = ${hash};
+}`;
 }
 
 /**
