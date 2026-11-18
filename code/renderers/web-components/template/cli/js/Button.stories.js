@@ -1,13 +1,23 @@
 import preview from '../../.storybook/preview';
+import { html } from 'lit';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { fn } from 'storybook/test';
 
-import { Button } from './Button';
+import './Button';
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories
 const meta = preview.meta({
   title: 'Example/Button',
   tags: ['autodocs'],
-  render: (args) => Button(args),
+  render: ({ primary, backgroundColor, size, label, onClick }) => html`
+    <storybook-button
+      ?primary=${primary}
+      background-color=${ifDefined(backgroundColor)}
+      size=${ifDefined(size)}
+      label=${label}
+      @click=${onClick}
+    ></storybook-button>
+  `,
   argTypes: {
     backgroundColor: { control: 'color' },
     size: {
