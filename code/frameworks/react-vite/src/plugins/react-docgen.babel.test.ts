@@ -57,7 +57,7 @@ describe('react-docgen and the project Babel config', () => {
   it('documents components the same way without a project Babel config', async () => {
     const result = await transform('Button.tsx', BUTTON);
 
-    const docgenInfo = result?.code.split('Button.__docgenInfo=')[1];
+    const docgenInfo = result?.code.split('Button.__docgenInfo=')[1].split('\n')[0];
     expect(JSON.parse(docgenInfo!)).toMatchInlineSnapshot(`
       {
         "description": "",
@@ -114,5 +114,26 @@ export const Intrinsic = ({ label }: { label: string }) => {
     );
 
     expect(result).toBeUndefined();
+  });
+});
+
+describe('react-docgen and HMR', () => {
+  /** Runs the code the plugin appends after the docgen, with `hot` in place of `import.meta.hot`. */
+  async function runHmrCode(src: string, hot: { data: Record<string, unknown> }) {
+    const result = await transform('Button.tsx', src);
+    const hmrCode = result!.code.slice(result!.code.indexOf(';if (import.meta.hot)'));
+    new Function('hot', hmrCode.replaceAll('import.meta.hot', 'hot'))(hot);
+  }
+
+  it('invalidates the module only when the docgen changes', async () => {
+    const invalidate = vi.fn();
+    const hot = { data: {}, invalidate };
+
+    await runHmrCode(BUTTON, hot);
+    await runHmrCode(BUTTON.replace('<button>', '<button type="button">'), hot);
+    expect(invalidate).not.toHaveBeenCalled();
+
+    await runHmrCode(BUTTON.replace('The label', 'The text of the button'), hot);
+    expect(invalidate).toHaveBeenCalledTimes(1);
   });
 });
