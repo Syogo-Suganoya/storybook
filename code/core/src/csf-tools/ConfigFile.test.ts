@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+import { logger } from 'storybook/internal/node-logger';
 
 import { dedent } from 'ts-dedent';
 
@@ -2404,6 +2406,22 @@ describe('ConfigFile', () => {
 
       expect(config._exportDecls['path']).toBe(undefined);
       expect(config._exports['path']).toBe(undefined);
+    });
+
+    it('reads a main config that re-exports an imported shared config without warnings', () => {
+      const warn = vi.spyOn(logger, 'warn');
+      const source = dedent`
+        import storybookConfig from '@myorg/storybook-config';
+
+        export default storybookConfig;
+      `;
+      const config = loadConfig(source, 'main.ts').parse();
+
+      expect(config.inspect(['framework']).kind).toBe('unreadable');
+      expect(config.getNameFromPath(['framework'])).toBeUndefined();
+      expect(config.getNamesFromPath(['addons'])).toBeUndefined();
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
 
     it('detects const and function export declarations', () => {
