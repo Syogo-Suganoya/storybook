@@ -238,8 +238,7 @@ function findCommonJsExport(program: E.Program) {
  * 3. `tseslint.config(...)` from `typescript-eslint`
  * 4. A top-level variable holding one of the above
  *
- * For any other ES module config, only the import is added. Any other CommonJS config is left
- * unchanged, with a warning to add the Storybook config manually.
+ * Any other config is left unchanged, with a warning to add the Storybook config manually.
  */
 export const configureFlatConfig = async (code: string, configFile: string) => {
   const editor = new SourceEditor(code, configFile);
@@ -323,9 +322,13 @@ export const configureFlatConfig = async (code: string, configFile: string) => {
     (node): node is E.ExportDefaultDeclaration => node.type === 'ExportDefaultDeclaration'
   );
   const target = findConfigTarget(exportDefault?.declaration as Node | undefined, editor, helpers);
-  if (target) {
-    addStorybookConfig(editor, target, 'storybook');
+  if (!target) {
+    logger.warn(
+      `Could not automatically add eslint-plugin-storybook to ${configFile}. Please add it manually: import storybook from 'eslint-plugin-storybook'; then add ...storybook.configs['flat/recommended'] to the exported config. See https://storybook.js.org/docs/configure/integration/eslint-plugin`
+    );
+    return code;
   }
+  addStorybookConfig(editor, target, 'storybook');
 
   prependStatement(
     editor,
