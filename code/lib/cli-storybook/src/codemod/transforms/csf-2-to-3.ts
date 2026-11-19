@@ -287,8 +287,107 @@ export default async function transform(
     upgradeDeprecatedTypes(editor);
   }
   removeUnusedTemplates(editor, templates);
+  if (!keepStoryTypes) {
+    typeMetaAndStories(editor, objectExports);
+  }
 
   return formatExistingFile(info.path, printCsf(csf).code);
+}
+
+const isStorybookTypeImport = (statement: Node): statement is E.ImportDeclaration =>
+  statement.type === 'ImportDeclaration' &&
+  statement.source.value.startsWith('@storybook') &&
+  !statement.source.value.startsWith('@storybook/csf');
+
+const localNameOf = (imports: E.ImportDeclaration[], type: string) =>
+  imports
+    .flatMap((statement) => statement.specifiers)
+    .find(
+      (specifier) =>
+        specifier.type === 'ImportSpecifier' &&
+        specifier.imported.type === 'Identifier' &&
+        specifier.imported.name === type
+    )?.local.name;
+
+// export default { ... } as Meta<typeof Cat>;
+// becomes
+// const meta: Meta<typeof Cat> = { ... };
+// export default meta;
+//
+// type Story = StoryObj<typeof Cat>;
+// and every story this codemod turned into an object is typed as `Story`.
+function typeMetaAndStories(editor: SourceEditor, storyNames: Set<string>) {
+  const { program } = editor;
+  const imports = program.body.filter(isStorybookTypeImport);
+  const metaType = localNameOf(imports, 'Meta');
+  const exportDefault = program.body.find(
+    (statement): statement is E.ExportDefaultDeclaration =>
+      statement.type === 'ExportDefaultDeclaration'
+  );
+  const declaration = exportDefault?.declaration as Node | undefined;
+  if (
+    !metaType ||
+    !exportDefault ||
+    (declaration?.type !== 'TSAsExpression' && declaration?.type !== 'TSSatisfiesExpression') ||
+    declaration.expression.type !== 'ObjectExpression' ||
+    declaration.typeAnnotation.type !== 'TSTypeReference' ||
+    declaration.typeAnnotation.typeName.type !== 'Identifier' ||
+    declaration.typeAnnotation.typeName.name !== metaType
+  ) {
+    return;
+  }
+
+  const usedNames = new Set<string>();
+  walk(program, (node) => {
+    if (node.type === 'Identifier') {
+      usedNames.add(node.name);
+    }
+  });
+  if (usedNames.has('meta')) {
+    return;
+  }
+
+  const metaTypeText = editor.source(declaration.typeAnnotation);
+  const objectText = editor.source(declaration.expression);
+  const metaDeclaration =
+    declaration.type === 'TSAsExpression'
+      ? `const meta: ${metaTypeText} = ${objectText};`
+      : `const meta = ${objectText} satisfies ${metaTypeText};`;
+
+  const typeArgument = declaration.typeAnnotation.typeArguments?.params[0];
+  const storyArgs = typeArgument ? editor.source(typeArgument) : 'typeof meta';
+  const stories = program.body.flatMap((statement) => {
+    if (statement.type !== 'ExportNamedDeclaration' || !isSingleConstExport(statement)) {
+      return [];
+    }
+    const { id } = (statement.declaration as E.VariableDeclaration).declarations[0];
+    const isUntyped =
+      id.type === 'Identifier' &&
+      storyNames.has(id.name) &&
+      !(id as { typeAnnotation?: unknown }).typeAnnotation;
+    return isUntyped ? [id] : [];
+  });
+
+  let storyTypeAlias = '';
+  if (stories.length > 0 && !usedNames.has('Story')) {
+    let storyObjType = localNameOf(imports, 'StoryObj');
+    if (!storyObjType) {
+      const metaImport = imports.find((statement) => localNameOf([statement], 'Meta'));
+      storyObjType = 'StoryObj';
+      editor.edits.appendLeft(metaImport!.specifiers[0].start, `${storyObjType}, `);
+    }
+    storyTypeAlias = `\n\ntype Story = ${storyObjType}<${storyArgs}>;`;
+    for (const id of stories) {
+      editor.edits.appendLeft(id.end, ': Story');
+    }
+  }
+
+  editor.edits.overwrite(
+    exportDefault.start,
+    exportDefault.end,
+    `${metaDeclaration}\nexport default meta;${storyTypeAlias}`
+  );
+  editor.commit();
 }
 
 const storyTypes = [

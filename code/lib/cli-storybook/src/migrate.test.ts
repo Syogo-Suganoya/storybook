@@ -58,7 +58,7 @@ describe('migrate', () => {
 
     // csf-2-to-3 should transform Template.bind({}) to CSF3 object
     expect(result).not.toContain('Template.bind({})');
-    expect(result).toContain('export const SimpleBar = {');
+    expect(result).toContain('export const SimpleBar: Story = {');
   });
 
   it('keeps the code it does not change as written in a project without Prettier', async () => {
@@ -68,16 +68,19 @@ describe('migrate', () => {
     await migrate('csf-2-to-3', { glob: storyFile });
 
     expect(readFileSync(storyFile, 'utf-8')).toMatchInlineSnapshot(`
-      "import { Meta, StoryFn } from '@storybook/react-vite'
+      "import { StoryObj, Meta, StoryFn } from '@storybook/react-vite'
 
       import { Chart, ChartProps } from './chart'
 
-      export default {
+      const meta: Meta = {
         component: Chart,
         title: 'Chart',
-      } as Meta
+      };
+      export default meta;
 
-      export const SimpleBar = {
+      type Story = StoryObj<typeof meta>;
+
+      export const SimpleBar: Story = {
         args: { name: 'test' },
       }
       "
@@ -127,7 +130,7 @@ Primary.args = {
     const result = readFileSync(storyFile, 'utf-8');
 
     expect(result).not.toContain('Template.bind({})');
-    expect(result).toContain('export const SimpleBar = {');
+    expect(result).toContain('export const SimpleBar: Story = {');
   });
 
   it('should handle glob patterns', async () => {
