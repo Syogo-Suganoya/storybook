@@ -1049,6 +1049,107 @@ describe('transformer', () => {
           }
         `);
       });
+      it('runs only the .test() children with a test-fn include filter', async () => {
+        const code = `
+          import { config } from '#.storybook/preview';
+          const meta = config.meta({});
+          export const WithTests = meta.story({});
+          WithTests.test("plain", () => {});
+          WithTests.test("smoke", { tags: ['smoke'] }, () => {});
+          export const WithoutTests = meta.story({});
+        `;
+
+        const result = await transform({
+          code,
+          tagsFilter: { include: [Tag.TEST_FN], exclude: [], skip: [] },
+        });
+
+        expect(result.code).toMatchInlineSnapshot(`
+          import { test as _test, expect as _expect, describe as _describe } from "vitest";
+          import { testStory as _testStory, convertToFilePath } from "@storybook/addon-vitest/internal/test-utils";
+          import { config } from '#.storybook/preview';
+                    const meta = config.meta({ title: "automatic/calculated/title" });
+                    export const WithTests = meta.story({});
+                    WithTests.test("plain", () => {});
+                    WithTests.test("smoke", { tags: ['smoke'] }, () => {});
+                    export const WithoutTests = meta.story({});
+                  
+          const _isRunningFromThisFile = convertToFilePath(import.meta.url).includes(globalThis.__vitest_worker__.filepath ?? _expect.getState().testPath);
+          if (_isRunningFromThisFile) {
+            _describe("With Tests  ", () => {
+              _test("plain", _testStory({ exportName: "WithTests", story: WithTests, meta: meta, skipTags: [], storyId: "automatic-calculated-title--with-tests:plain", testName: "plain" }));
+              _test("smoke", _testStory({ exportName: "WithTests", story: WithTests, meta: meta, skipTags: [], storyId: "automatic-calculated-title--with-tests:smoke", testName: "smoke" }));
+            });
+          }
+        `);
+      });
+
+      it('drops the .test() children with a test-fn exclude filter', async () => {
+        const code = `
+          import { config } from '#.storybook/preview';
+          const meta = config.meta({});
+          export const WithTests = meta.story({});
+          WithTests.test("plain", () => {});
+          WithTests.test("smoke", { tags: ['smoke'] }, () => {});
+          export const WithoutTests = meta.story({});
+        `;
+
+        const result = await transform({
+          code,
+          tagsFilter: { include: [Tag.TEST], exclude: [Tag.TEST_FN], skip: [] },
+        });
+
+        expect(result.code).toMatchInlineSnapshot(`
+          import { test as _test, expect as _expect } from "vitest";
+          import { testStory as _testStory, convertToFilePath } from "@storybook/addon-vitest/internal/test-utils";
+          import { config } from '#.storybook/preview';
+                    const meta = config.meta({ title: "automatic/calculated/title" });
+                    export const WithTests = meta.story({});
+                    WithTests.test("plain", () => {});
+                    WithTests.test("smoke", { tags: ['smoke'] }, () => {});
+                    export const WithoutTests = meta.story({});
+                  
+          const _isRunningFromThisFile = convertToFilePath(import.meta.url).includes(globalThis.__vitest_worker__.filepath ?? _expect.getState().testPath);
+          if (_isRunningFromThisFile) {
+            _test("With Tests", _testStory({ exportName: "WithTests", story: WithTests, meta: meta, skipTags: [], storyId: "automatic-calculated-title--with-tests" }));
+            _test("Without Tests", _testStory({ exportName: "WithoutTests", story: WithoutTests, meta: meta, skipTags: [], storyId: "automatic-calculated-title--without-tests" }));
+          }
+        `);
+      });
+
+      it('runs only the .test() children whose own tags match tags.include', async () => {
+        const code = `
+          import { config } from '#.storybook/preview';
+          const meta = config.meta({});
+          export const WithTests = meta.story({});
+          WithTests.test("plain", () => {});
+          WithTests.test("smoke", { tags: ['smoke'] }, () => {});
+          export const WithoutTests = meta.story({});
+        `;
+
+        const result = await transform({
+          code,
+          tagsFilter: { include: ['smoke'], exclude: [], skip: [] },
+        });
+
+        expect(result.code).toMatchInlineSnapshot(`
+          import { test as _test, expect as _expect, describe as _describe } from "vitest";
+          import { testStory as _testStory, convertToFilePath } from "@storybook/addon-vitest/internal/test-utils";
+          import { config } from '#.storybook/preview';
+                    const meta = config.meta({ title: "automatic/calculated/title" });
+                    export const WithTests = meta.story({});
+                    WithTests.test("plain", () => {});
+                    WithTests.test("smoke", { tags: ['smoke'] }, () => {});
+                    export const WithoutTests = meta.story({});
+                  
+          const _isRunningFromThisFile = convertToFilePath(import.meta.url).includes(globalThis.__vitest_worker__.filepath ?? _expect.getState().testPath);
+          if (_isRunningFromThisFile) {
+            _describe("With Tests  ", () => {
+              _test("smoke", _testStory({ exportName: "WithTests", story: WithTests, meta: meta, skipTags: [], storyId: "automatic-calculated-title--with-tests:smoke", testName: "smoke" }));
+            });
+          }
+        `);
+      });
     });
 
     describe('source map calculation', () => {
