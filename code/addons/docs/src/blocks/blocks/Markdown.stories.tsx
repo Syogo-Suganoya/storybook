@@ -1,3 +1,5 @@
+import { expect } from 'storybook/test';
+
 import { dedent } from 'ts-dedent';
 
 import mdContent from '../examples/Markdown-content.md?raw';
@@ -74,6 +76,30 @@ export const Markdown = {
  * imported from a .md file. So this story doesn't actually test the component, but rather the
  * import at the top of the CSF file
  */
+export const MultilineInlineCode = {
+  args: {
+    children: dedent`
+    To omit columns, leave them out of the headers:
+
+    \`const headers = [
+      { field: "id" },
+      { field: "name" },
+    ];\`
+
+    A fenced block still renders as a code block:
+
+    \`\`\`ts
+    const headers = [{ field: "id" }];
+    \`\`\`
+    `,
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expect(canvasElement.querySelectorAll('p pre, p div')).toHaveLength(0);
+    await expect(canvasElement.querySelector('p code')).toHaveTextContent('const headers');
+    await expect(canvasElement.querySelectorAll('pre')).not.toHaveLength(0);
+  },
+};
+
 export const ImportedMDFile = {
   name: 'Imported .md file',
   args: { children: mdContent },
