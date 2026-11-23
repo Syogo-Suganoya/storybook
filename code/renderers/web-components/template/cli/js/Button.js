@@ -1,20 +1,42 @@
-import { html } from 'lit';
+import { LitElement, html } from 'lit';
 import { styleMap } from 'lit/directives/style-map.js';
 
 import './button.css';
 
 /** Primary UI component for user interaction */
-export const Button = ({ primary, backgroundColor = null, size, label, onClick }) => {
-  const mode = primary ? 'storybook-button--primary' : 'storybook-button--secondary';
+export class StorybookButton extends LitElement {
+  static properties = {
+    primary: { type: Boolean },
+    backgroundColor: { type: String, attribute: 'background-color' },
+    size: { type: String },
+    label: { type: String },
+  };
 
-  return html`
-    <button
-      type="button"
-      class=${['storybook-button', `storybook-button--${size || 'medium'}`, mode].join(' ')}
-      style=${styleMap({ backgroundColor })}
-      @click=${onClick}
-    >
-      ${label}
-    </button>
-  `;
-};
+  constructor() {
+    super();
+    this.primary = false;
+    this.size = 'medium';
+    this.label = '';
+  }
+
+  // Render into the light DOM so that the styles imported above apply to the button
+  createRenderRoot() {
+    return this;
+  }
+
+  render() {
+    const mode = this.primary ? 'storybook-button--primary' : 'storybook-button--secondary';
+
+    return html`
+      <button
+        type="button"
+        class=${['storybook-button', `storybook-button--${this.size}`, mode].join(' ')}
+        style=${styleMap({ backgroundColor: this.backgroundColor })}
+      >
+        ${this.label}
+      </button>
+    `;
+  }
+}
+
+customElements.define('storybook-button', StorybookButton);
