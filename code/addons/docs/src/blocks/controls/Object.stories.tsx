@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { expect, fn, waitFor } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 
 import { ObjectControl } from './Object';
 
@@ -188,5 +188,52 @@ export const ArraySmallViewport: Story = {
   },
   parameters: {
     chromatic: { viewports: [320] },
+  },
+};
+
+export const LongArray: Story = {
+  args: {
+    value: globalThis.Array.from({ length: 40 }, (_, index) => `Item number ${index + 1}`),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const toggle = canvas.getByRole('button', { name: 'object :' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(canvas.getByText(/40 items/)).toBeInTheDocument();
+    // `withRawArg` prints the whole value below the control, so look inside the tree only.
+    const tree = within(canvasElement.querySelector<HTMLElement>('.rejt-tree')!);
+    await expect(tree.queryByText(/Item number 40/)).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(await tree.findByText(/Item number 40/)).toBeInTheDocument();
+  },
+};
+
+export const LongObject: Story = {
+  args: {
+    value: globalThis.Object.fromEntries(
+      globalThis.Array.from({ length: 12 }, (_, index) => [`key${index + 1}`, index + 1])
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText(/12 keys/)).toBeInTheDocument();
+  },
+};
+
+export const ArrayWithLongNestedList: Story = {
+  args: {
+    value: [
+      'short',
+      { tags: globalThis.Array.from({ length: 10 }, (_, index) => `tag${index + 1}`) },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'object :' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    await expect(canvas.getByText(/10 items/)).toBeInTheDocument();
   },
 };

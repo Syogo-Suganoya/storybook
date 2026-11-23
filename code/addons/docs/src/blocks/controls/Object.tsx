@@ -163,6 +163,13 @@ const selectValue = (event: SyntheticEvent<HTMLInputElement>) => {
 
 export type ObjectProps = ControlProps<ObjectValue> & ObjectConfig;
 
+// A long array or object starts collapsed, so a single arg doesn't fill the whole panel. The limit
+// matches the type summaries in the args table.
+const ITEMS_BEFORE_COLLAPSE = 8;
+
+const isLongValue = (_keyPath: string[], _deep: number, value: unknown) =>
+  typeof value === 'object' && value !== null && Object.keys(value).length > ITEMS_BEFORE_COLLAPSE;
+
 export const ObjectControl: FC<ObjectProps> = ({
   name,
   storyId,
@@ -279,7 +286,7 @@ export const ObjectControl: FC<ObjectProps> = ({
       {!showRaw ? (
         <JsonTree
           readOnly={readonly || !isObjectOrArray}
-          isCollapsed={isObjectOrArray ? /* default value */ undefined : () => true}
+          isCollapsed={isObjectOrArray ? isLongValue : () => true}
           data={data}
           rootName={name}
           onFullyUpdate={onChange}
