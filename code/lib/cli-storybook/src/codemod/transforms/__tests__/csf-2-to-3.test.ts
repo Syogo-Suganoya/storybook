@@ -594,16 +594,106 @@ describe('csf-2-to-3', () => {
           export const Default = Template.bind({})
         `)
       ).resolves.toMatchInlineSnapshot(`
-        import { StoryFn, Meta } from "@storybook/react";
+        import { StoryObj, StoryFn, Meta } from "@storybook/react";
 
-        export default {
+        const meta = {
           component: Cat,
         } satisfies Meta;
+        export default meta;
+
+        type Story = StoryObj<typeof meta>;
 
         const Template: StoryFn = () => <div>Hello World</div>;
 
-        export const Default = {
+        export const Default: Story = {
           render: Template,
+        };
+      `);
+    });
+    it('moves an asserted meta into a typed const and types the stories it turned into objects', async () => {
+      await expect(
+        tsTransform(dedent`
+          import { ComponentMeta, ComponentStory } from '@storybook/react';
+          import { Button } from './Button';
+
+          export default {
+            title: 'Button',
+            component: Button,
+          } as ComponentMeta<typeof Button>;
+
+          const Template: ComponentStory<typeof Button> = (args) => <Button {...args} />;
+
+          export const Primary = Template.bind({});
+          Primary.args = { primary: true };
+
+          export const Secondary = Template.bind({});
+          Secondary.args = { primary: false };
+        `)
+      ).resolves.toMatchInlineSnapshot(`
+        import { StoryObj, Meta, StoryFn } from "@storybook/react";
+        import { Button } from "./Button";
+
+        const meta: Meta<typeof Button> = {
+          title: "Button",
+          component: Button,
+        };
+        export default meta;
+
+        type Story = StoryObj<typeof Button>;
+
+        export const Primary: Story = {
+          args: { primary: true },
+        };
+
+        export const Secondary: Story = {
+          args: { primary: false },
+        };
+      `);
+    });
+
+    it('moves the meta but does not add a Story type when the name is taken', async () => {
+      await expect(
+        tsTransform(dedent`
+          import { Meta } from '@storybook/react';
+          import { Story } from './Story';
+
+          export default { component: Story } as Meta<typeof Story>;
+
+          export const A = (args) => <Story {...args} />;
+          A.args = { label: 'A' };
+        `)
+      ).resolves.toMatchInlineSnapshot(`
+        import { Meta } from "@storybook/react";
+        import { Story } from "./Story";
+
+        const meta: Meta<typeof Story> = { component: Story };
+        export default meta;
+
+        export const A = {
+          args: { label: "A" },
+        };
+      `);
+    });
+
+    it('leaves the meta in place when the name meta is taken', async () => {
+      await expect(
+        tsTransform(dedent`
+          import { Meta } from '@storybook/react';
+          import { meta } from './data';
+
+          export default { component: Cat, args: meta } as Meta<typeof Cat>;
+
+          export const A = (args) => <Cat {...args} />;
+          A.args = { name: 'A' };
+        `)
+      ).resolves.toMatchInlineSnapshot(`
+        import { Meta } from "@storybook/react";
+        import { meta } from "./data";
+
+        export default { component: Cat, args: meta } as Meta<typeof Cat>;
+
+        export const A = {
+          args: { name: "A" },
         };
       `);
     });
