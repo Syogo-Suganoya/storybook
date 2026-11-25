@@ -2,7 +2,7 @@
 import { getStoryTitle } from 'storybook/internal/common';
 import { combineTags } from 'storybook/internal/csf/csf-utils';
 import { logger } from 'storybook/internal/node-logger';
-import type { StoriesEntry, Tag } from 'storybook/internal/types';
+import type { StoriesEntry, Tag as TagName } from 'storybook/internal/types';
 
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { dedent } from 'ts-dedent';
@@ -11,6 +11,7 @@ import { type CsfSourceMap, type StoryTest, loadCsf } from '../CsfFile.ts';
 import { type Node, locationOf, staticKey } from '../estree/ast.ts';
 import { type SourceEditor, appendMembers, prependStatement } from '../estree/editor.ts';
 import { generateUid } from '../estree/scope.ts';
+import { Tag } from '../../shared/constants/tags.ts';
 
 type TagsFilter = {
   include: string[];
@@ -111,7 +112,7 @@ export async function vitestTransform({
   configDir: string;
   tagsFilter: TagsFilter;
   stories: StoriesEntry[];
-  previewLevelTags: Tag[];
+  previewLevelTags: TagName[];
 }): Promise<ReturnType<typeof printWithTail>> {
   const parsed = loadCsf(code, {
     fileName,
@@ -163,19 +164,28 @@ export async function vitestTransform({
     }
   }
 
-  // Filter out stories based on the passed tags filter
+  // Filter the stories and their `.test()` children based on the passed tags filter. A test gets
+  // the tags of its story plus its own and `test-fn`, as in the story index.
   const validStories: (typeof parsed)['_storyStatements'] = {};
+  const validTests: Record<string, { runsStory: boolean; tests: StoryTest[] }> = {};
   Object.keys(parsed._stories).forEach((key) => {
-    const finalTags = combineTags(
+    const storyTags = [
       'test',
       'dev',
       ...previewLevelTags,
       ...(parsed.meta?.tags || []),
-      ...(parsed._stories[key].tags || [])
-    );
+      ...(parsed._stories[key].tags || []),
+    ];
+    const runsStory = isValidTest(combineTags(...storyTags), tagsFilter);
+    const tests = parsed
+      .getStoryTests(key)
+      .filter((test) =>
+        isValidTest(combineTags(...storyTags, ...test.tags, Tag.TEST_FN), tagsFilter)
+      );
 
-    if (isValidTest(finalTags, tagsFilter)) {
+    if (runsStory || tests.length > 0) {
       validStories[key] = parsed._storyStatements[key];
+      validTests[key] = { runsStory, tests };
     }
   });
 
@@ -240,14 +250,16 @@ export async function vitestTransform({
     // use the story's name as the test title for vitest, and fallback to exportName
     const testTitle = parsed._stories[exportName].name ?? exportName;
     const storyId = parsed._stories[exportName].id;
-    const tests: StoryTest[] = parsed.getStoryTests(exportName);
+    const { runsStory, tests } = validTests[exportName];
 
-    if (tests?.length > 0) {
+    if (tests.length > 0) {
       tail.push(`  ${vitestDescribeId}(${q(`${testTitle}${DOUBLE_SPACES}`)}, () => {`, node);
-      tail.push(
-        `    ${vitestTestId}("base story", ${testStoryCall(localName, exportName, storyId)});`,
-        node
-      );
+      if (runsStory) {
+        tail.push(
+          `    ${vitestTestId}("base story", ${testStoryCall(localName, exportName, storyId)});`,
+          node
+        );
+      }
       for (const { name: testName, node: testNode, id: testId } of tests) {
         tail.push(
           `    ${vitestTestId}(${q(testName)}, ${testStoryCall(localName, exportName, testId, testName)});`,
@@ -265,9 +277,7 @@ export async function vitestTransform({
   }
   tail.push('}');
 
-  const hasTests = Object.keys(validStories).some(
-    (exportName) => parsed.getStoryTests(exportName).length > 0
-  );
+  const hasTests = Object.values(validTests).some(({ tests }) => tests.length > 0);
 
   prependStatement(
     editor,
